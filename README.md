@@ -18,7 +18,7 @@ M-Bus decoding uses the library [**MBusinoLib**](https://github.com/Zeppelin500/
 * **Smart Calibration UI:** Easily calibrate your OneWire DS18B20 sensors to an average value or a specific target temperature with a single click.
 * **Bulletproof Layout:** Fixed severe template engine bugs from the underlying webserver that previously broke the UI on mobile devices.
 
-## Hardware & Setup
+## Hardware
 
 This fork supports the same hardware as the original MBusino 5s. 
 - M-Bus e.g. heatmeter (up to five slaves)
@@ -26,6 +26,26 @@ This fork supports the same hardware as the original MBusino 5s.
 - I²C BME280, temperatur, r. humidity, air pressure
 
 You will find the original provided 3D-printable PCB case inside the `case` folder.
+
+### ⚠️ Hardware Warning: DykbRadio MBUS-TTL Module
+
+If you are using the **DykbRadio MBUS-TTL** module, please double-check the orientation of the diode located right next to the 100mH inductor!
+
+On many of these modules shipped from the factory, this diode is soldered backwards. This results in the following symptoms:
+* The module does not work at all (you will measure 0V instead of ~30V between the `M+` and `M-` pins).
+* The module gets extremely hot, especially in the area around the inductor.
+
+**The Fix:** To correct this, you need to desolder the diode, rotate it by 180°, and solder it back into place. 
+
+![Correct Diode Orientation](pictures/DykbRadio_MBUS-TTL_fixed.jpeg)
+*The image above shows the **correct** orientation of the diode after the fix.*
+
+**Replacement Part:**
+If you happen to lose or damage the diode during the modification, you can replace it with almost any standard Schottky diode. 
+* **Voltage/Current:** A minimum rating of 40V (60V recommended to handle inductor spikes) and ~1A.
+* **Package Size:** The footprint on the PCB matches a standard **SOD-123** package (body length ~2.6mm). The original marking "S4" usually corresponds to a generic 40V/1A Schottky diode (e.g., B140HW, 1N5819HW, or similar).
+
+## Setup
 
 ### Access Point to configure
 * SSID **MBusino Setup Portal** IP(normally not needed): 192.168.4.1
@@ -36,5 +56,37 @@ You will find the original provided 3D-printable PCB case inside the `case` fold
 * **UI/UX & Feature Enhancements:** [aut0mat3d](https://github.com/aut0mat3d)
 * AllWize for the MbusPayload library
 * HWHardsoft and TrystanLea for the M-Bus communication
+
+## 💻 Software Requirements
+
+To compile this project with the Arduino IDE (Version 1.8.19 recommended), you need the following libraries.
+
+### 1. Manual Installation (Download as .zip)
+These libraries are specific to the MBusino project and must be downloaded from GitHub and added via `Sketch -> Include Library -> Add .ZIP Library...`:
+
+* [**MBusinoLib**](https://github.com/Zeppelin500/MBusinoLib) (Decoding logic)
+* [**MBusCom**](https://github.com/Zeppelin500/MBusCom) (Serial communication layer)
+
+### 2. Arduino Library Manager
+Search for and install the following libraries directly in the IDE (`Tools -> Manage Libraries...`):
+
+| Library Name | Version (tested) | Purpose |
+| :--- | :--- | :--- |
+| **ArduinoJson** | 6.x or 7.x | Config & Profile handling |
+| **ESPAsyncWebServer** | Latest | Web Interface |
+| **AsyncTCP** (for ESP32) | Latest | Webserver dependency |
+| **ESPAsyncTCP** (for ESP8266) | Latest | Webserver dependency |
+| **PubSubClient** | Latest | MQTT communication |
+| **OneWire** | Latest | DS18B20 Bus communication |
+| **DallasTemperature** | Latest | Temperature sensor logic |
+| **Adafruit BME280 Library** | Latest | I2C Sensor support |
+| **Adafruit Unified Sensor** | Latest | Base for BME280 |
+
+### 3. Board Support (Boards Manager)
+Make sure you have installed the following cores via `Tools -> Board -> Boards Manager...`:
+* **esp32** by Espressif Systems
+* **esp8266** by ESP8266 Community
+
+*Note: Built-in libraries like `LittleFS`, `WiFi`, `ESPmDNS`, `ArduinoOTA`, and `esp_now` are included in the board cores and do not need separate installation.*
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
