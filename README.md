@@ -42,7 +42,7 @@ On many of these modules shipped from the factory, this diode is soldered backwa
 
 **Replacement Part:**
 If you happen to lose or damage the diode during the modification, you can replace it with almost any standard Schottky diode. 
-* **Voltage/Current:** A minimum rating of 40V (60V recommended to handle inductor spikes) and ~1A.
+* **Voltage/Current:** A minimum rating of 60V and ~1A.
 * **Package Size:** The footprint on the PCB matches a standard **SOD-123** package (body length ~2.6mm). The original marking "S4" usually corresponds to a generic 40V/1A Schottky diode (e.g., B140HW, 1N5819HW, or similar).
 
 ## Setup
