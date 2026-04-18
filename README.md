@@ -51,6 +51,64 @@ If you happen to lose or damage the diode during the modification, you can repla
 * SSID **MBusino Setup Portal** IP(normally not needed): 192.168.4.1
 * If Mbusino does not find a known network, it starts an AP for 5 minutes. After this period, it will restart and search again.
 
+### 🔑 Default Credentials & Access
+After a fresh flash, MBusino uses the following defaults:
+* **Web-UI Password:** *None*
+* **OTA Update Password:** `mbusino`
+
+### 🚑 Emergency Web-UI Unlock (Double-Reset Trick)
+If you forgot your Web-UI password or locked yourself out, you can temporarily bypass the login screen:
+1. Press the `RESET` button on the ESP board twice quickly (within 1.5 seconds).
+2. The internal LED will blink twice rapidly to confirm.
+3. You now have exactly 15 minutes to access the Web-UI without a password and change your settings.
+
+### 🛟 Smart Island Mode (Fallback AP)
+If MBusino loses connection to your router (or if no credentials are provided), it will automatically start a Fallback Access Point.
+* **SSID:** `[YourDeviceName]_AP_mode` (e.g. `MBusino_AP_mode`)
+* **Password:** *None* (Open Network)
+* **IP Address:** `192.168.4.1`
+* *Note:* If a configured router becomes available again, MBusino will automatically detect it in the background and reconnect, seamlessly disabling the AP.
+*         To have the Device in permanent AP-Mode (standalone) simply delete all Wlan Credentials in the Network Tab.
+
+## 📡 ESP-NOW Integration
+
+MBusino can operate as a headless bridge, broadcasting all parsed M-Bus and sensor data directly to other ESP8266/ESP32 devices (like Solar Controllers, Smart Displays, or custom relays) via **ESP-NOW**. This bypasses the WiFi router and MQTT broker entirely, providing an ultra-low latency and highly reliable connection.
+
+* **Target MAC:** Can be configured in the Web-UI. Use `FF:FF:FF:FF:FF:FF` to broadcast to all listening devices, or specify a dedicated receiver MAC.
+* **Transmission:** Data is pushed dynamically every 5 seconds.
+
+### Receiver Payload Structure (C++)
+To receive the data on another ESP, use the following `struct`. It is exactly 175 Bytes long and packed to prevent memory padding issues. The `magic` header and `system_id` allow you to filter out packets from other devices which enables the use of multible MBusino Devices broadcasting via ESP-NOW.
+
+```cpp
+typedef struct __attribute__((packed)) {
+  char magic[5];            // Magic Header: 'M', 'B', 'I', 'S', 'P'
+  uint8_t version;          // Protocol Version (currently 1)
+  uint32_t system_id;       // Unique ID (FNV-1a Hash of the MBusino Network Name)
+
+  struct {
+    uint32_t fab_number;    // Fabrication Number (e.g., 72532544). 0 = unused/offline
+    uint8_t status;         // Standardized Status Byte (0-7):
+                            // 0: OK, 1: Deadband active, 2: Min Flow Limit warning,
+                            // 3: Max Flow Limit warning, 4: Max Power Limit warning,
+                            // 5: Bouncer Hold (Values frozen), 6: Bouncer Timeout,
+                            // 7: Offline / Fatal Error (Values are NaN)
+    float energy;           // Current energy reading (usually kWh or MWh)
+    float volume_flow;      // Current flow rate in m³/h
+    float power;            // Current power in kW
+    float flow_temp;        // Forward temperature in °C
+    float return_temp;      // Return temperature in °C
+  } meters[5];              // Data for up to 5 M-Bus Slaves
+
+  float ds18b20[7];         // Data for 7 OneWire Sensors in °C (-127.0 = invalid)
+  
+  struct {
+    float temperature;      // °C (-127.0 = invalid)
+    float pressure;         // hPa (0.0 = invalid)
+    float humidity;         // % (-1.0 = invalid)
+  } bme;                    // BME280 Environment Sensor
+} ESPNowPayload;
+
 ## Credits & License
 * **Original Creator:** Zeppelin500 (Thank you for the amazing work!)
 * **UI/UX & Feature Enhancements:** [aut0mat3d](https://github.com/aut0mat3d)

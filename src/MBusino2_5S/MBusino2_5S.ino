@@ -31,6 +31,36 @@ Repository for this Code: https://github.com/aut0mat3d/MBusino2_5S/
   bypassing WiFi/Router completely for maximum reliability.
 ****************************************************
 
+
+ * =============================================================================
+ * IDE COMPILE SETTINGS FOR ESP32-S2 MINI (via "ESP32S2 Dev Module")
+ * =============================================================================
+ * Board:           ESP32S2 Dev Module
+ * USB CDC On Boot: Enabled  <-- CRITICAL for Serial Monitor over USB!
+ * Flash Size:      4MB (32Mb)
+ * Partition Scheme:Minimal SPIFFS (1.9MB APP with OTA/190KB SPIFFS)
+ * PSRAM:           Enabled
+ * Upload Mode:     Internal USB
+ * ==============================================================================
+ * * ============================================================================
+ * IDE COMPILE SETTINGS FOR WEMOS/LOLIN D1 MINI (Standard 4MB Variant)
+ * ==============================================================================
+ * Board:           LOLIN(WEMOS) D1 R2 & mini (or typical D1 mini clone)
+ * Flash Size:      4MB (FS:1MB OTA:~1019KB)
+ * ==============================================================================
+ * * ============================================================================
+ * IDE COMPILE SETTINGS FOR WEMOS/LOLIN D1 MINI PRO (16MB Variant)
+ * ==============================================================================
+ * Board:           LOLIN(WEMOS) D1 R2 & mini
+ * Flash Size:      16MB (FS:14MB OTA:~1019KB)
+ * ==============================================================================
+ * 
+ * NOTE: Switching from a 4MB Variant to a 16MB Variant and vice versa will
+ *       result in a Loss of all stored config and all Profiles!
+ *       be aware to have your config.json and all non standard meter-profiles
+ *       backed up and be prepared to reconfigure the device via AP-mode.
+ * ==============================================================================      
+ 
 ## Licence
 ****************************************************
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by
@@ -417,6 +447,12 @@ uint8_t adSensorMessageCounter = 0; // Counter for autodiscover mbus message.
 uint32_t minFreeHeap = 0;
 uint16_t pulseInterval = 1000;
 
+#if defined(ESP32)
+RTC_DATA_ATTR uint32_t rtcMagic = 0;
+#else
+  uint32_t rtcMagic = 0;
+#endif
+
 // --- HELPER: Calculate a unique 32-bit Hash from a string (FNV-1a) ---
 uint32_t calculateSystemId(const char* name) {
   uint32_t hash = 2166136261u;
@@ -495,16 +531,19 @@ void setup() {
   // --- Double Reset Detection ---
   // This is used to enable the WebIF by pressing reset twice in 2 seconds
   // When a Double Reset is detected you can access the WebIF without a Password
-  uint32_t rtcMagic = 0;
-  ESP.rtcUserMemoryRead(0, &rtcMagic, sizeof(rtcMagic)); // Read RTC Mem
+
+  #if defined(ESP8266)
+  ESP.rtcUserMemoryRead(0, &rtcMagic, sizeof(rtcMagic));
+  #endif
   
   if (rtcMagic == 1337) {
     // 2x Reset pressed!
     tempWebUnlock = true;
     unlockTimer = millis();
     rtcMagic = 0; // Clear Marker
-    ESP.rtcUserMemoryWrite(0, &rtcMagic, sizeof(rtcMagic));
-    
+    #if defined(ESP8266)
+      ESP.rtcUserMemoryWrite(0, &rtcMagic, sizeof(rtcMagic));
+    #endif
     // Visual Feedback: 2x fast blink
     pinMode(LED_BUILTIN, OUTPUT);
     for(int i=0; i<2; i++){
@@ -516,13 +555,17 @@ void setup() {
   } else {
     // First Start, set our Marker
     rtcMagic = 1337;
-    ESP.rtcUserMemoryWrite(0, &rtcMagic, sizeof(rtcMagic));
+    #if defined(ESP8266)
+      ESP.rtcUserMemoryWrite(0, &rtcMagic, sizeof(rtcMagic));
+    #endif
     // Wait 1.5s for a second Click
     delay(1500);
     
     // Delay passed by - so, no second Click
     rtcMagic = 0;
-    ESP.rtcUserMemoryWrite(0, &rtcMagic, sizeof(rtcMagic));
+    #if defined(ESP8266)
+      ESP.rtcUserMemoryWrite(0, &rtcMagic, sizeof(rtcMagic));
+    #endif
   }
   // ------------------------------
 
@@ -837,7 +880,7 @@ void setup() {
         #endif
         WiFi.mode(WIFI_AP);
         
-        String apName = String("MBusino_Setup_") + String(userData.mbusinoName);
+        String apName = String(userData.mbusinoName) + "_AP_mode";
         WiFi.softAP(apName.c_str(), NULL, userData.apChannel, 0);
         
         apMode = true;

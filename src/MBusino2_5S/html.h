@@ -48,6 +48,11 @@ const char index_html[] PROGMEM = R"rawliteral(
       
       #lock-banner { display: none; background-color: #ffb74d; color: #1a2627; text-align: center; padding: 12px; border-radius: 5px; margin-bottom: 15px; font-weight: bold; font-size: 0.95rem; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
 
+      /* --- OVERLAY CSS --- */
+      #loading-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; justify-content: center; align-items: center; flex-direction: column; color: white; font-size: 1.2rem; }
+      .spinner { border: 6px solid #438287; border-top: 6px solid #ffb74d; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
       /* --- MOBILE RESPONSIVE FIXES --- */
       @media (max-width: 600px) {
         .sensor-row.flex-row { flex-wrap: wrap; margin-bottom: 15px; }
@@ -57,29 +62,27 @@ const char index_html[] PROGMEM = R"rawliteral(
     </style>
     <script>
       let lastEditTime = 0;
+      let isSaving = false;
       const LOCK_TIMEOUT_MS = 300000; 
       let availableProfiles = [];
 
       document.addEventListener("DOMContentLoaded", function() {
         const form = document.getElementById('config-form');
         
-        // Helper-Function for ignoring inputs for not triggering "changes detected..."
         const shouldIgnore = (target) => {
-          // Ignoriere alle File-Uploads
           if (target.type === 'file') return true;
-          // Ignore Passwort-Checkbox and Checkboxes from Restore-Panel (all are starting with 'chk-')
           if (target.id && target.id.startsWith('chk-')) return true;
           return false;
         };
 
         form.addEventListener('input', (e) => {
-          if (shouldIgnore(e.target)) return;
+          if (isSaving || shouldIgnore(e.target)) return; // Block Ghost-Events
           lastEditTime = Date.now();
           updateLockBanner();
         });
         
         form.addEventListener('change', (e) => {
-          if (shouldIgnore(e.target)) return;
+          if (isSaving || shouldIgnore(e.target)) return; // Block Ghost-Events
           lastEditTime = Date.now();
           updateLockBanner();
         });
@@ -87,16 +90,6 @@ const char index_html[] PROGMEM = R"rawliteral(
         setInterval(updateLockBanner, 1000);
         fetchProfiles();
       });
-
-      function safeReboot(event) {
-        if (lastEditTime > 0) {
-          if (!confirm("Potentially unsaved changes, really reboot?")) {
-            if (event) event.preventDefault();
-            return;
-          }
-        }
-        window.location.href = '/reboot';
-      }
 
       function fetchProfiles() {
         fetch('/api/profiles')
@@ -123,7 +116,7 @@ const char index_html[] PROGMEM = R"rawliteral(
       function handleProfileChange(sel) {
         sel.setAttribute('data-current', sel.value);
         refreshSelectStyle(sel);
-        renderProfileTable(); // Update DEL buttons state
+        renderProfileTable(); 
         lastEditTime = Date.now();
         updateLockBanner();
       }
@@ -331,26 +324,75 @@ const char index_html[] PROGMEM = R"rawliteral(
         lastEditTime = Date.now(); updateLockBanner();
       }
 
-      function saveSettings(event) {
-        event.preventDefault(); lastEditTime = 0; updateLockBanner();
-        let params = new URLSearchParams(new FormData(document.getElementById('config-form'))).toString();
-        fetch('/get?' + params).then(response => response.text()).then(text => {
-          let banner = document.getElementById('save-banner'); banner.style.display = 'block';
-          if(text === "AP") { banner.style.backgroundColor = "#e57373"; banner.innerHTML = "WLAN changed. <a href='/reboot'>Reboot</a>!"; }
-          else if (text === "CHANGED") { banner.style.backgroundColor = "#7db9b6"; banner.innerHTML = "Settings saved! <a href='/reboot'>Reboot</a> recommended."; }
-          else { banner.style.backgroundColor = "#5a7b7c"; banner.innerHTML = "No changes."; }
+      // --- SAVE FUNCTION (POST REQUEST) ---
+      async function saveSettings(event) {
+        event.preventDefault(); 
+        isSaving = true;  // Blocker AN
+        lastEditTime = 0; 
+        updateLockBanner();
+
+        const overlay = document.getElementById('loading-overlay');
+        const text = document.getElementById('loading-text');
+        overlay.style.display = 'flex';
+        text.innerText = 'Saving all Settings...';
+
+        try {
+          const form = document.getElementById('config-form');
+          const formData = new FormData(form);
+
+          // We send everything in ONE massive POST Request!
+          const response = await fetch('/saveAll', {
+            method: 'POST',
+            body: formData
+          });
+
+          if (!response.ok) throw new Error("HTTP Error");
+          const result = await response.text();
+
+          let banner = document.getElementById('save-banner');
+          banner.style.display = 'block';
+
+          if (result === "WLAN_CHANGED") {
+            banner.style.backgroundColor = "#e57373";
+            banner.innerHTML = "WLAN changed. <a href='/reboot'>Reboot!</a>";
+          } else if (result === "SAVED_AND_CHANGED") {
+            banner.style.backgroundColor = "#7db9b6";
+            banner.innerHTML = "Settings saved! <a href='/reboot'>Reboot recommended.</a>";
+          } else {
+            banner.style.backgroundColor = "#5a7b7c";
+            banner.innerHTML = "Everything up to date! (No changes)";
+            // On "No changes" we display the Banner only for 6 Seconds.
+            setTimeout(() => { banner.style.display = 'none'; }, 6000);
+          }
+
+          setTimeout(() => { 
+            overlay.style.display = 'none'; 
+            // reset lastEditTime
+            lastEditTime = 0;
+            updateLockBanner();
+            // Small Delay for Blocker
+            setTimeout(() => { isSaving = false; }, 200);
+          }, 800);
           window.scrollTo({ top: 0, behavior: 'smooth' });
-        });
+
+        } catch (error) {
+          text.innerText = "Error: Connection lost!";
+          text.style.color = "#f44336";
+          setTimeout(() => { 
+            overlay.style.display = 'none'; 
+            text.style.color = "white"; 
+            isSaving = false; 
+          }, 3000);
+        }
       }
 
       function safeReboot(event) {
         if (lastEditTime > 0) {
           if (!confirm("Potentially unsaved changes, really reboot?")) {
             if (event) event.preventDefault();
-            return; // Cancel, no Reboot
+            return; 
           }
         }
-        // No Changes, or User klicks OK:
         window.location.href = '/reboot';
       }
       
@@ -358,6 +400,7 @@ const char index_html[] PROGMEM = R"rawliteral(
       async function togglePasswords() {
         pwdsVisible = !pwdsVisible;
         let btn = document.getElementById('btn-show-pw');
+        // Dies sind die 'name' Attribute der input-Felder im HTML
         let pwFields = ['webPassword', 'otaPassword', 'password', 'password2', 'mqttPswrd'];
 
         if (pwdsVisible) {
@@ -368,6 +411,8 @@ const char index_html[] PROGMEM = R"rawliteral(
             let res = await fetch('/getPasswords?nonce=' + nonce);
             if(res.ok) {
               let data = await res.json();
+              console.log("Password Data received:", data); // Debugging
+
               const deobfuscate = (hexStr, k) => {
                 if(!hexStr) return ""; let out = "";
                 for(let i=0; i < hexStr.length; i+=2) {
@@ -376,18 +421,30 @@ const char index_html[] PROGMEM = R"rawliteral(
                   out += String.fromCharCode(charCode ^ k.charCodeAt(modIndex));
                 } return out;
               };
+              
+              // Mapping: HTML-Name -> JSON-Key
               let map = {webPassword:'wp', otaPassword:'op', password:'p1', password2:'p2', mqttPswrd:'mp'};
+              
               pwFields.forEach(f => {
                 let els = document.getElementsByName(f);
                 if(els.length > 0) { 
-                  let dec = deobfuscate(data[map[f]], key); if(dec !== "") els[0].value = dec; els[0].type = 'text'; 
+                  let dec = deobfuscate(data[map[f]], key); 
+                  if(dec !== "") {
+                    els[0].value = dec; 
+                  }
+                  els[0].type = 'text'; 
                 }
               });
             }
-          } catch(e) {}
+          } catch(e) {
+            console.error("Failed to fetch passwords:", e);
+          }
         } else { 
           btn.innerText = "Show Passwords";
-          pwFields.forEach(f => { let els = document.getElementsByName(f); if(els.length > 0) els[0].type = 'password'; }); 
+          pwFields.forEach(f => { 
+            let els = document.getElementsByName(f); 
+            if(els.length > 0) els[0].type = 'password'; 
+          }); 
         }
       }
 
@@ -400,12 +457,21 @@ const char index_html[] PROGMEM = R"rawliteral(
             stagedConfig = JSON.parse(e.target.result);
             document.getElementById('restore-panel').style.display = 'block';
           } catch (err) { alert("JSON Error."); }
+          
+          // CRITICAL BUGFIX: Reset the file input so it triggers again!
+          document.getElementById('configFile').value = ''; 
         }; reader.readAsText(file);
       }
 
       function applyConfigToForm() {
         if(!stagedConfig) return;
-        const setVal = (name, val) => { let els = document.getElementsByName(name); if(els.length > 0 && val !== undefined) els[0].value = val; };
+        const setVal = (name, val) => { 
+          try {
+            let els = document.getElementsByName(name); 
+            if(els.length > 0 && val !== undefined) els[0].value = val; 
+          } catch(e) {} // Silent catch if field is missing
+        };
+
         if(document.getElementById('chk-sys').checked && stagedConfig.system) {
           setVal('name', stagedConfig.system.deviceName);
           setVal('webPassword', stagedConfig.system.webPassword);
@@ -422,7 +488,6 @@ const char index_html[] PROGMEM = R"rawliteral(
             setVal('password2', stagedConfig.network.wifi.pwd2);
             setVal('apChannel', stagedConfig.network.wifi.apChannel);
           }
-          // --- FIX: ESP-NOW Restore ---
           if(stagedConfig.network.espnow) {
             setVal('espNowEnable', stagedConfig.network.espnow.enable ? '1' : '0');
             setVal('espNowMac', stagedConfig.network.espnow.mac);
@@ -444,8 +509,10 @@ const char index_html[] PROGMEM = R"rawliteral(
               setVal('mbusAddress'+(i+1), slave.address); setVal('slaveName'+(i+1), slave.name);
               setVal('minFlow'+(i+1), slave.minFlow); setVal('maxFlow'+(i+1), slave.maxFlow);
               setVal('maxPower'+(i+1), slave.maxPower); setVal('deadFlow'+(i+1), slave.deadband);
-              let sel = document.getElementsByName('profile'+(i+1))[0];
-              if (sel && slave.profile !== undefined) sel.setAttribute('data-current', slave.profile);
+              try {
+                let sel = document.getElementsByName('profile'+(i+1))[0];
+                if (sel && slave.profile !== undefined) sel.setAttribute('data-current', slave.profile);
+              } catch(e) {}
             });
             populateProfileDropdowns();
           }
@@ -470,6 +537,11 @@ const char index_html[] PROGMEM = R"rawliteral(
     </script>
   </head>
   <body>
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <div id="loading-text">Saving Settings...</div>
+    </div>
+
     <div class='container'>
       <h1><i>%MBUSINO_NAME%</i></h1>
       <div style="text-align: center; font-size: 0.75rem; color: #5a7b7c; margin-bottom: 10px; margin-top: -5px;">
@@ -489,9 +561,9 @@ const char index_html[] PROGMEM = R"rawliteral(
         <div id="tab-gen" class="tab-content active">
           <h3>System Settings</h3>
           <div class='form-group'><label>Device Name (Network Hostname)</label><input type='text' value='%MBUSINO_NAME%' maxlength='30' name='name'></div>
-          <div class='form-group'><label>Web-UI Password (NONE: disabled)</label><input type='%PWD_TYPE%' value='%WEB_PWD%' maxlength='64' name='webPassword'></div>
+          <div class='form-group'><label>Web-UI Password (NONE: disabled)</label><input type='%PWD_TYPE%' value='%WEB_PWD%' maxlength='64' name='webPassword' autocomplete='current-password'></div>
           <div class='flex-row'>
-             <div class='form-group' style="flex: 2;"><label>OTA Update Password</label><input type='%PWD_TYPE%' value='%OTA_PWD%' maxlength='64' name='otaPassword'></div>
+             <div class='form-group' style="flex: 2;"><label>OTA Update Password</label><input type='%PWD_TYPE%' value='%OTA_PWD%' maxlength='64' name='otaPassword' autocomplete='new-password'></div>
              <div class='form-group' style="flex: 1;"><a href="/update" class="btn-small">OTA Update</a></div>
           </div>
           <div class='flex-row'>
@@ -527,9 +599,9 @@ const char index_html[] PROGMEM = R"rawliteral(
         <div id="tab-net" class="tab-content">
           <h3>WLAN Settings</h3>
           <div class='form-group'><label>Primary SSID</label><input type='text' value='%SSID1%' maxlength='64' name='ssid'></div>
-          <div class='form-group'><label>Primary Password</label><input type='%PWD_TYPE%' value='%PWD1%' maxlength='64' name='password'></div>
+          <div class='form-group'><label>Primary Password</label><input type='%PWD_TYPE%' value='%PWD1%' maxlength='64' name='password' autocomplete='new-password'></div>
           <div class='form-group'><label>Fallback SSID (optional)</label><input type='text' value='%SSID2%' maxlength='64' name='ssid2'></div>
-          <div class='form-group'><label>Fallback Password</label><input type='%PWD_TYPE%' value='%PWD2%' maxlength='64' name='password2'></div>
+          <div class='form-group'><label>Fallback Password</label><input type='%PWD_TYPE%' value='%PWD2%' maxlength='64' name='password2' autocomplete='new-password'></div>
           <div class='form-group'><label>AP Channel</label><input type='number' min='1' max='13' value='%AP_CHAN%' name='apChannel'></div>
           
           <h3 style="margin-top: 20px;">MQTT Broker</h3>
@@ -538,7 +610,7 @@ const char index_html[] PROGMEM = R"rawliteral(
             <div class='form-group' style="flex: 0 0 100px;"><label>Port</label><input type='number' value='%PORT%' name='mqttPort'></div>
           </div>
           <div class='form-group'><label>MQTT User (optional)</label><input type='text' value='%MQTT_USER%' maxlength='64' name='mqttUser'></div>
-          <div class='form-group'><label>MQTT Password (optional)</label><input type='%PWD_TYPE%' value='%MQTT_PWD%' maxlength='64' name='mqttPswrd'></div>
+          <div class='form-group'><label>MQTT Password (optional)</label><input type='%PWD_TYPE%' value='%MQTT_PWD%' maxlength='64' name='mqttPswrd' autocomplete='new-password'></div>
           
           <h3 style="margin-top: 20px;">ESP-NOW Broadcast</h3>
           <p class="hint">Send sensor data directly to other ESP-NOW capable Devices.</p>
@@ -751,7 +823,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         </div>
         
         <div class="action-bar">
-          <button type='submit' class="btn-save">Save Settings</button>
+          <button type='submit' class="btn-save">Save All Settings</button>
           <button type='button' class="btn-reboot" onclick="safeReboot(event)">Reboot</button>
         </div>
         
@@ -824,7 +896,7 @@ const char setAddress_html[] PROGMEM = R"rawliteral(
     <main class='form-signin'>
       <h1 class=''><i>MBusino</i></h1><br>
       <h3 style='text-align:center'>Set Address for one connected slave</h3><br>
-      <form style='text-align:center' action='/get'>
+      <form style='text-align:center' action='/setaddressApi'>
         Address(1-250): <input type='number' name='newAddress'>
         <input type='submit' value='Set'>
       </form><br/>
