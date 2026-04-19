@@ -4,6 +4,9 @@
 > **Fork Notice:** This is a fork of the fantastic original [MBusino](https://github.com/Zeppelin500/MBusino) project by Zeppelin500. It focuses entirely on the 5-Slave (5S) version and introduces a completely redesigned responsive Web-UI, a dynamic JSON Profile Manager, and ESP-NOW support.
 Please note, that i cannot provide Support - be aware that it possibly would take Time for me to reply and/or implement Fixes if Bugs occour.
 
+### You want to support me?
+[![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/DeinPayPalName)
+
 ### M-Bus --> MQTT-Gateway with shields for ESPs
 
 A **Plug and Play** solution for smart home integration.
