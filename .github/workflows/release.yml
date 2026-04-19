@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write # Wichtig: Erlaubt dem Bot, das Release-Dokument zu erstellen
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true #Node.js 24 wird am 2. Juni 2026 zum Standard
+										   #Node.js 20 is depeciated
+
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
@@ -40,11 +44,6 @@ jobs:
           git clone https://github.com/Zeppelin500/MBusinoLib.git
           git clone https://github.com/Zeppelin500/MBusCom.git
 
-      - name: Compile for ESP32-S2 Mini
-        run: |
-          arduino-cli compile --fqbn esp32:esp32:esp32s2:CDCOnBoot=cdc,PartitionScheme=min_spiffs,PSRAM=enabled src/MBusino2_5S/MBusino2_5S.ino --output-dir build/esp32s2
-          mv build/esp32s2/MBusino2_5S.ino.bin build/MBusino2_5S_ESP32-S2_Mini.bin
-
       - name: Compile for D1 Mini (4MB)
         run: |
           arduino-cli compile --fqbn esp8266:esp8266:d1_mini:eesz=4M1M src/MBusino2_5S/MBusino2_5S.ino --output-dir build/d1_mini_4mb
@@ -55,6 +54,19 @@ jobs:
           arduino-cli compile --fqbn esp8266:esp8266:d1_mini_pro:eesz=16M14M src/MBusino2_5S/MBusino2_5S.ino --output-dir build/d1_mini_16mb
           mv build/d1_mini_16mb/MBusino2_5S.ino.bin build/MBusino2_5S_D1_Mini_Pro_16MB.bin
 
+      - name: Compile for ESP32-S2 Mini
+        run: |
+          arduino-cli compile --fqbn esp32:esp32:esp32s2:CDCOnBoot=cdc,PartitionScheme=min_spiffs,PSRAM=enabled src/MBusino2_5S/MBusino2_5S.ino --output-dir build/esp32s2
+          # Verschiebe die Haupt-App
+          mv build/esp32s2/MBusino2_5S.ino.bin build/MBusino2_5S_ESP32-S2_Mini.bin
+          # Suche und verschiebe Bootloader und Partitionen (falls vorhanden)
+          if [ -f "build/esp32s2/MBusino2_5S.ino.bootloader.bin" ]; then
+            mv build/esp32s2/MBusino2_5S.ino.bootloader.bin build/MBusino2_5S_ESP32-S2_Mini_bootloader.bin
+          fi
+          if [ -f "build/esp32s2/MBusino2_5S.ino.partitions.bin" ]; then
+            mv build/esp32s2/MBusino2_5S.ino.partitions.bin build/MBusino2_5S_ESP32-S2_Mini_partitions.bin
+          fi
+
       - name: Create Release Draft and Upload Artifacts
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
@@ -62,8 +74,10 @@ jobs:
           draft: true  # Das yml erstellt nur einen Entwurf!
           prerelease: false
           files: |
-            build/MBusino2_5S_ESP32-S2_Mini.bin
             build/MBusino2_5S_D1_Mini_4MB.bin
             build/MBusino2_5S_D1_Mini_Pro_16MB.bin
+            build/MBusino2_5S_ESP32-S2_Mini.bin
+            build/MBusino2_5S_ESP32-S2_Mini_bootloader.bin
+            build/MBusino2_5S_ESP32-S2_Mini_partitions.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
