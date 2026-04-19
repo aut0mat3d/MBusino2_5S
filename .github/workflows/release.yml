@@ -1,0 +1,69 @@
+name: Build and Release MBusino 5S
+
+on:
+  push:
+    tags:
+      - 'v*' # Reagiert auf Tags wie v2.0.0
+  workflow_dispatch: # Erlaubt manuelles Anstoßen über die GitHub UI
+
+permissions:
+  contents: write # Wichtig: Erlaubt dem Bot, das Release-Dokument zu erstellen
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP Cores
+        run: |
+          arduino-cli core update-index --additional-urls https://arduino.esp8266.com/stable/package_esp8266com_index.json,https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp8266:esp8266 --additional-urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+          arduino-cli core install esp32:esp32 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+
+      - name: Install Standard Libraries
+        run: |
+          arduino-cli lib install "PubSubClient" "OneWire" "DallasTemperature" "Adafruit BME280 Library" "Adafruit Unified Sensor" "ArduinoJson"
+
+      - name: Install Custom & GitHub Libraries
+        run: |
+          mkdir -p $HOME/Arduino/libraries
+          cd $HOME/Arduino/libraries
+          git clone https://github.com/me-no-dev/ESPAsyncWebServer.git
+          git clone https://github.com/me-no-dev/AsyncTCP.git
+          git clone https://github.com/me-no-dev/ESPAsyncTCP.git
+          git clone https://github.com/Zeppelin500/MBusinoLib.git
+          git clone https://github.com/Zeppelin500/MBusCom.git
+
+      - name: Compile for ESP32-S2 Mini
+        run: |
+          arduino-cli compile --fqbn esp32:esp32:esp32s2:CDCOnBoot=cdc,PartitionScheme=min_spiffs,PSRAM=enabled src/MBusino2_5S/MBusino2_5S.ino --output-dir build/esp32s2
+          mv build/esp32s2/MBusino2_5S.ino.bin build/MBusino2_5S_ESP32-S2_Mini.bin
+
+      - name: Compile for D1 Mini (4MB)
+        run: |
+          arduino-cli compile --fqbn esp8266:esp8266:d1_mini:eesz=4M1M src/MBusino2_5S/MBusino2_5S.ino --output-dir build/d1_mini_4mb
+          mv build/d1_mini_4mb/MBusino2_5S.ino.bin build/MBusino2_5S_D1_Mini_4MB.bin
+
+      - name: Compile for D1 Mini Pro (16MB)
+        run: |
+          arduino-cli compile --fqbn esp8266:esp8266:d1_mini_pro:eesz=16M14M src/MBusino2_5S/MBusino2_5S.ino --output-dir build/d1_mini_16mb
+          mv build/d1_mini_16mb/MBusino2_5S.ino.bin build/MBusino2_5S_D1_Mini_Pro_16MB.bin
+
+      - name: Create Release Draft and Upload Artifacts
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: true  # Das yml erstellt nur einen Entwurf!
+          prerelease: false
+          files: |
+            build/MBusino2_5S_ESP32-S2_Mini.bin
+            build/MBusino2_5S_D1_Mini_4MB.bin
+            build/MBusino2_5S_D1_Mini_Pro_16MB.bin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
