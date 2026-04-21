@@ -1,4 +1,9 @@
-# MBusino 5S - Enhanced Fork
+# ⚠️ MBusino 5S - Enhanced Fork - TESTING ONLY!!
+
+**PLEASE BE AWARE BEFORE USING:**
+* **Heat Meters Only:** The current M-Bus section and the newly introduced profiles are explicitly meant and tested for **Heat Meters** only at the moment!
+* **Breaking Changes in MQTT:** The presentation to the MQTT Broker has been fundamentally restructured. Every sensor is now presented as an independent device to Home Assistant. **Updating from v1.x WILL BREAK your existing implementations and Long Term Statistics!**
+
 [![version](https://img.shields.io/badge/version-2.0.0-brightgreen.svg)](CHANGELOG.md)<br/>
 
 > **Fork Notice:** This is a fork of the fantastic original [MBusino](https://github.com/Zeppelin500/MBusino) project by Zeppelin500. It focuses entirely on the 5-Slave (5S) version and introduces a completely redesigned responsive Web-UI, a dynamic JSON Profile Manager, and ESP-NOW support.
